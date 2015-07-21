@@ -34,7 +34,7 @@ import org.slf4j.LoggerFactory;
  * 
  * Writing the objects to an array gave problems when parsing the result from
  * other languages that don't provide a streaming JSON parser; in this way
- * parsing can be done im memory per line of output.
+ * parsing can be done in memory per line of output.
  * 
  * @author Carsten Byrman <carsten.byrman@nelen-schuurmans.nl>
  */
