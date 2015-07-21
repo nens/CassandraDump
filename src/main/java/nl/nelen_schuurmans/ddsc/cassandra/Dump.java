@@ -24,14 +24,18 @@ import org.slf4j.LoggerFactory;
  * One-off code for dumping DDSC's Cassandra database to gzip-compressed JSON
  * (it will be garbage collected after migration).
  *
- * The JSON will be formatted something like this:
+ * Each line in the output file will have a JSON object like this:
  *
- * [{"key":"97f16f51-c916-41ad-ae88-4ee8b1626b44:2014","columns":[
+ * {"key":"97f16f51-c916-41ad-ae88-4ee8b1626b44:2014","columns":[
  * ["2014-01-03T02:59:17.000000Z_flag","-1",1388718646815724],
  * ["2014-01-03T02:59:17.000000Z_value","-2.8927",1388718646815724],
  * ["2014-01-05T00:00:02.000000Z_flag","-1",1388882404411913],
- * ["2014-01-05T00:00:02.000000Z_value","-2.9056",1388882404411913],...]},...]
- *
+ * ["2014-01-05T00:00:02.000000Z_value","-2.9056",1388882404411913],...]}
+ * 
+ * Writing the objects to an array gave problems when parsing the result from
+ * other languages that don't provide a streaming JSON parser; in this way
+ * parsing can be done im memory per line of output.
+ * 
  * @author Carsten Byrman <carsten.byrman@nelen-schuurmans.nl>
  */
 public class Dump {
@@ -88,15 +92,20 @@ public class Dump {
         JsonFactory jf = new JsonFactory();
         JsonGenerator jg = jf.createJsonGenerator(output, JsonEncoding.UTF8);
 
-        jg.writeStartArray();
-
         int i = 0;
 
         // Our version of Cassandra does not support automatic paging in CQL,
         // resulting in a lot of boilerplate code.
         while (true) {
 
-            //logger.info("Fetching data for partion key #{}: {}", i++, key);
+            i++;
+            
+            if (i > 1) {
+                jg.writeRaw('\n');
+            }
+            
+            logger.info("Fetching data for partion key #{}: {}", i, key);
+            
             // Get the first page for the current key.
             sql = String.format("SELECT key, column1, value, writetime(value) "
                     + "FROM %s WHERE key = %s LIMIT %d",
@@ -151,10 +160,13 @@ public class Dump {
             row = rs.one();
             keyHex = Bytes.toHexString(row.getBytes("key"));
             key = charset.decode(row.getBytes("key")).toString();
+            
+            if (i > 1) {
+                break;
+            }
 
         }
 
-        jg.writeEndArray();
         jg.close();
         output.close();
         session.close();
