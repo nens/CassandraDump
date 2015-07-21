@@ -160,10 +160,6 @@ public class Dump {
             row = rs.one();
             keyHex = Bytes.toHexString(row.getBytes("key"));
             key = charset.decode(row.getBytes("key")).toString();
-            
-            if (i > 1) {
-                break;
-            }
 
         }
 
