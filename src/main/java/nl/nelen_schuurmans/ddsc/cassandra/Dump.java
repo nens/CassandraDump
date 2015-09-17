@@ -55,7 +55,7 @@ public class Dump {
     public static void main(String[] args) throws IOException {
 
         // Filename, e.g. `/data/ddsc.json.gz`
-        String file = args.length > 0 ? args[0] : "ddsc.json.gz";
+        String file = args.length > 0 ? args[0] : "ddsc.dump.";
 
         Cluster cluster = Cluster.builder().addContactPoints(NODES).withPort(PORT).build();
         Session session = cluster.connect(KEYSPACE);
@@ -87,21 +87,34 @@ public class Dump {
             System.exit(1);
         }
 
+        int file_num = 0;
+
         // Write to a gzip-compressed file using a streaming JSON processor.
-        OutputStream output = new GZIPOutputStream(new BufferedOutputStream(new FileOutputStream(file)));
+        OutputStream output = new GZIPOutputStream(new BufferedOutputStream(new FileOutputStream(String.format("%s%04d.json.gz", file, file_num++))));
         JsonFactory jf = new JsonFactory();
         JsonGenerator jg = jf.createJsonGenerator(output, JsonEncoding.UTF8);
 
         int i = 0;
+        int total = 0;
+        int max_lines = 5000;
 
         // Our version of Cassandra does not support automatic paging in CQL,
         // resulting in a lot of boilerplate code.
         while (true) {
 
             i++;
-            
+
             if (i > 1) {
-                jg.writeRaw('\n');
+                        if (total >= max_lines) {
+                            jg.close();
+                            output.close();
+                            output = new GZIPOutputStream(new BufferedOutputStream(new FileOutputStream(String.format("%s%04d.json.gz", file, file_num++))));
+                            jg = jf.createJsonGenerator(output, JsonEncoding.UTF8);
+                            total = 1;
+                        } else {
+                            jg.writeRaw('\n');
+                            total++;
+                        }
             }
             
             logger.info("Fetching data for partion key #{}: {}", i, key);
@@ -122,7 +135,28 @@ public class Dump {
 
                 Iterator<Row> iter = rs.iterator();
 
+                int j = 0;
                 while (iter.hasNext()) {
+                    if ((j > 0) && (j % 500 == 0)) {
+                        jg.writeEndArray();
+                        jg.writeEndObject();
+                        if (total >= max_lines) {
+                            jg.close();
+                            output.close();
+                            output = new GZIPOutputStream(new BufferedOutputStream(new FileOutputStream(String.format("%s%04d.json.gz", file, file_num++))));
+                            jg = jf.createJsonGenerator(output, JsonEncoding.UTF8);
+                            total = 1;
+                        } else {
+                            jg.writeRaw('\n');
+                            total++;
+                        }
+                        jg.writeStartObject();
+                        jg.writeStringField("key", key);
+                        jg.writeFieldName("columns");
+                        jg.writeStartArray();
+                    }
+                    j++;
+
                     row = iter.next();
                     String column1 = charset.decode(row.getBytes("column1")).toString();
                     String value = charset.decode(row.getBytes("value")).toString();
